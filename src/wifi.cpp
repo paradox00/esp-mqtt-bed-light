@@ -75,7 +75,9 @@ void wifi_eventGotIp(const WiFiEventStationModeGotIP & ctx)
 
 void wifi_EventDisconnect(const WiFiEventStationModeDisconnected & ctx)
 {
-    Serial.println("Wifi disconnected");
+    Serial.print("Wifi disconnected; ");
+    Serial.print("RSSI: ");
+    Serial.println(WiFi.RSSI());
     digitalWrite(GPIO_LED_INTERNAL, 0);
 }
 
@@ -90,6 +92,10 @@ void wifi_setup(const String& ssid, const String& pwd, const String& name)
     ota_server.setup(&HTTP, "admin", "password");
     http_setup();
 
+    WiFi.setAutoConnect(true);
+    WiFi.setAutoReconnect(true);
+    WiFi.mode(WIFI_STA);
+    
     WiFi.begin(ssid, pwd);
     NBNS.begin(name.c_str());
     MDNS.begin(name);

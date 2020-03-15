@@ -11,6 +11,10 @@
 #define WIFI_PWD  "***REMOVED***"
 #define WIFI_DEV_NAME "esp-test"
 
+constexpr int SECTION_STATUS = 0;
+constexpr int SECTION_1 = 1;
+constexpr int SECTION_2 = 2;
+
 const char *mqtt_topic_avail = "hass/binary_sensor/button-test/availability";
 const char *mqtt_topic_state = "hass/binary_sensor/button-test/state";
 const char *mqtt_topic_cmd = "hass/binary_sensor/button-test/cmd";
@@ -88,13 +92,14 @@ void setup() {
 
 
   led_strip.setup();
+  led_strip.setMaxBrightness(255 / 5);
   led_strip.add_section(0, 1, 180);
-  led_strip.add_section(1, 0, 0);
+  led_strip.add_section(1, 0, 1);
 
   led_strip.set_color(0, 64, 128, 255);
-
   led_strip.set_color(1, 128, 0, 0);
   led_strip.on(1);
+  led_strip.off(0);
 
   Serial.print("finished setup!");
 }
@@ -104,16 +109,10 @@ void loop() {
   wifi_loop();
   mqtt.loop();
 
-  // button.loop();
-  // pir.loop();
+  button.loop();
+  pir.loop();
 
   led_strip.loop();
-
-  static int last_wifi_state = 0;
-  if (WiFi.status() != last_wifi_state){
-    Serial.printf("wifi status changes %d\n", WiFi.status());
-    last_wifi_state = WiFi.status();
-  }
 
   if (WiFi.status() == WL_CONNECTED && !mqtt.connected() && (mqtt_time + 100 < millis())){
     mqtt_time = millis();
@@ -125,13 +124,13 @@ void loop() {
       // // "{\"name\": \"button_test\", \"dev_cla\": \"plug\", \"stat_t\": \"hass/binary_sensor/button-test/state\", \"avty_t\":\"hass/binary_sensor/button-test/availability\"}"
       // "{\"name\": \"a1\", \"dev_cla\": \"plug\", \"stat_t\": \"hass/binary_sensor/button-test/state\", \"off_delay\":1}"
       // );
-      led_strip.on(1);
+      // led_strip.on(1);
     } else {
       if (mqtt.state() != MQTT_CONNECT_FAILED){
         Serial.print("mqtt failed, rc=");
         Serial.print(mqtt.state());
         Serial.println();
-        led_strip.off(1);
+        // led_strip.off(1);
       }
     }
   }

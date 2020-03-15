@@ -7,6 +7,19 @@
 // #define colorSaturation 64
 constexpr int colorSaturation = 255;
 
+LedStrip::LedStrip(const int pixelCount, const int pixelPin, const int _sections_num) : 
+        _strip(pixelCount, pixelPin), _pixel_count(pixelCount), _sections_num(_sections_num),
+        _animations(_sections_num)
+{
+    // static_assert(pixelPin == 2);
+    _animations_param = new AnimationParams[_sections_num];
+    _sections = new Sections[_sections_num];
+}
+
+void LedStrip::setMaxBrightness(uint8_t brightness){
+    _strip.SetBrightness(brightness);
+}
+
 void LedStrip::BlendAnimUpdate(const AnimationParam& param)
 {
     // this gets called for each animation on every time step
