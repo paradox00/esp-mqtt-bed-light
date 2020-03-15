@@ -5,6 +5,7 @@
 #include "wifi.hpp"
 #include "led.hpp"
 #include "button.hpp"
+#include "mqtt.hpp"
 
 #define BUTTON_RELEASE_DELAY (50)
 #define WIFI_SSID "***REMOVED***"
@@ -26,10 +27,12 @@ int button_state = 0;
 unsigned int button_time = 0;
 bool button_changed = false;
 
-WiFiClient mqttClient;
-PubSubClient mqtt(mqttClient);
-long lastMsg = 0;
-char msg[50];
+// WiFiClient mqttClient;
+// PubSubClient mqtt(mqttClient);
+// long lastMsg = 0;
+// char msg[50];
+
+MQTTService mqtt(mqtt_server, mqtt_topic_avail, "online", "offline");
 
 const uint16_t PixelCount = 180; // this example assumes 4 pixels, making it smaller will cause a failure
 const uint8_t PixelPin = 2;  // make sure to set this to the correct pin, ignored for Esp8266
@@ -87,9 +90,8 @@ void setup() {
   }, nullptr);
 
   wifi_setup(WIFI_SSID, WIFI_PWD, WIFI_DEV_NAME);
-  mqtt.setServer(mqtt_server, 1883);
-  mqtt.setCallback(mqtt_callback);
 
+  mqtt.subscribe(mqtt_topic_cmd, mqtt_callback);
 
   led_strip.setup();
   led_strip.setMaxBrightness(255 / 5);
@@ -113,26 +115,4 @@ void loop() {
   pir.loop();
 
   led_strip.loop();
-
-  if (WiFi.status() == WL_CONNECTED && !mqtt.connected() && (mqtt_time + 100 < millis())){
-    mqtt_time = millis();
-    if(mqtt.connect("button", mqtt_topic_avail, 0, false, "offline")){
-      Serial.println("mqtt connected");
-      mqtt.publish(mqtt_topic_avail, "online");
-      mqtt.subscribe(mqtt_topic_cmd);
-      // mqtt.publish("hass/binary_sensor/button-test/config", 
-      // // "{\"name\": \"button_test\", \"dev_cla\": \"plug\", \"stat_t\": \"hass/binary_sensor/button-test/state\", \"avty_t\":\"hass/binary_sensor/button-test/availability\"}"
-      // "{\"name\": \"a1\", \"dev_cla\": \"plug\", \"stat_t\": \"hass/binary_sensor/button-test/state\", \"off_delay\":1}"
-      // );
-      // led_strip.on(1);
-    } else {
-      if (mqtt.state() != MQTT_CONNECT_FAILED){
-        Serial.print("mqtt failed, rc=");
-        Serial.print(mqtt.state());
-        Serial.println();
-        // led_strip.off(1);
-      }
-    }
-  }
-
 }
