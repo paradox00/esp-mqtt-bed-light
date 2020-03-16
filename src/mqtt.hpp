@@ -46,6 +46,8 @@ public:
     boolean subscribe(const char *topic, MQTT_CALLBACK_SIGNATURE, uint16_t topic_length = 0);
     boolean connect();
 
+    boolean connected() { return _mqtt.connected();  }
+
     void loop();
 
     // mqttButton(PubSubClient mqtt, const String &name, const String &type, const String availability_topic) : _mqtt(mqtt), _name(name), _type(type), _connected(false), _tmp_topic(), _tmp_message(), _availability_topic(availability_topic), _state_topic()

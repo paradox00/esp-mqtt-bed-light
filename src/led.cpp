@@ -59,7 +59,7 @@ void LedStrip::on(int section_num)
 
     _animations_param[section_num].StartingColor = _strip.GetPixelColor(_sections[section_num].start);
     _animations_param[section_num].EndingColor = _sections[section_num].color; //RgbColor(0, 0, colorSaturation);
-    _animations.StartAnimation(0, 100, [this](const AnimationParam &param) {
+    _animations.StartAnimation(section_num, ANIM_DURATION_ON, [this](const AnimationParam &param) {
         this->BlendAnimUpdate(param);
     });
 }
@@ -68,21 +68,7 @@ void LedStrip::off(int section_num)
 {
     _animations_param[section_num].StartingColor = _strip.GetPixelColor(_sections[section_num].start);
     _animations_param[section_num].EndingColor = RgbColor(0, 0, 0);
-    _animations.StartAnimation(0, 500, [this](const AnimationParam &param) {
+    _animations.StartAnimation(section_num, ANIM_DURATION_OFF, [this](const AnimationParam &param) {
         this->BlendAnimUpdate(param);
     });
-}
-
-void LedStrip::toggle()
-{
-    _state = !_state;
-    
-    if (_state){
-        color = RgbColor(0, 0, colorSaturation);
-    } else {
-        color = RgbColor(0, 0, 0);
-    }
-    Serial.printf("LED: _state = %d, color=(%d,%d,%d)\n", _state, color.R, color.G, color.B);
-    _strip.SetPixelColor(1, color);
-    _strip.ClearTo(color, 0, 4);
 }

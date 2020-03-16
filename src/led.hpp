@@ -16,7 +16,6 @@ public:
     }
 
     void setMaxBrightness(uint8_t brightness);
-    void toggle();
     void on(int section_num = 0);
     void off(int section_num = 0);
 
@@ -25,12 +24,14 @@ public:
     void set_color(int sec_num, int r, int b, int g) { _sections[sec_num].color = RgbColor(r, g, b); }
 
 private:
+    static constexpr int ANIM_DURATION_ON = 100;
+    static constexpr int ANIM_DURATION_OFF = 500;
+
     // NeoPixelBus<NeoGrbFeature, NeoEsp8266Uart1800KbpsMethod> _strip;
     // NeoPixelBus<NeoGrbFeature, NeoEsp8266Dma800KbpsMethod> _strip;
     NeoPixelBrightnessBus<NeoGrbFeature, NeoEsp8266Dma800KbpsMethod> _strip;
     int _pixel_count;
     int _sections_num;
-    bool _state;
     RgbColor color;
 
     NeoPixelAnimator _animations;

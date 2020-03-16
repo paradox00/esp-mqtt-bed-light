@@ -12,9 +12,9 @@
 #define WIFI_PWD  "***REMOVED***"
 #define WIFI_DEV_NAME "esp-test"
 
-constexpr int SECTION_STATUS = 0;
-constexpr int SECTION_1 = 1;
-constexpr int SECTION_2 = 2;
+constexpr int LED_SECTION_STATUS = 0;
+constexpr int LED_SECTION_1 = 1;
+constexpr int LED_SECTION_2 = 2;
 
 const char *mqtt_topic_avail = "hass/binary_sensor/button-test/availability";
 const char *mqtt_topic_state = "hass/binary_sensor/button-test/state";
@@ -36,7 +36,7 @@ MQTTService mqtt(mqtt_server, mqtt_topic_avail, "online", "offline");
 
 const uint16_t PixelCount = 180; // this example assumes 4 pixels, making it smaller will cause a failure
 const uint8_t PixelPin = 2;  // make sure to set this to the correct pin, ignored for Esp8266
-LedStrip led_strip(PixelCount, PixelPin, 1);
+LedStrip led_strip(PixelCount, PixelPin, 5);
 
 Button button(pin_button);
 Button pir(5); // D1
@@ -66,26 +66,26 @@ void setup() {
   button.setup();
   button.set_press_cb([](void *ctx) { 
     (void)ctx;
-    led_strip.on(0);
+    led_strip.on(LED_SECTION_1);
     mqtt.publish(mqtt_topic_state, "ON");
   }, nullptr);
 
   button.set_release_cb([](void *ctx) { 
     (void)ctx;
-    led_strip.off(0);
+    led_strip.off(LED_SECTION_1);
     mqtt.publish(mqtt_topic_state, "OFF");
   }, nullptr);
 
   pir.setup(false);
   pir.set_press_cb([](void *ctx) { 
     (void)ctx;
-    led_strip.on(0);
+    led_strip.on(LED_SECTION_1);
     mqtt.publish(mqtt_topic_state, "ON");
   }, nullptr);
 
   pir.set_release_cb([](void *ctx) { 
     (void)ctx;
-    led_strip.off(0);
+    led_strip.off(LED_SECTION_1);
     mqtt.publish(mqtt_topic_state, "OFF");
   }, nullptr);
 
@@ -95,13 +95,13 @@ void setup() {
 
   led_strip.setup();
   led_strip.setMaxBrightness(255 / 5);
-  led_strip.add_section(0, 1, 180);
-  led_strip.add_section(1, 0, 1);
+  led_strip.add_section(LED_SECTION_1, 1, 180);
+  led_strip.add_section(LED_SECTION_STATUS, 0, 0);
 
-  led_strip.set_color(0, 64, 128, 255);
-  led_strip.set_color(1, 128, 0, 0);
-  led_strip.on(1);
-  led_strip.off(0);
+  led_strip.set_color(LED_SECTION_1, 64, 128, 255);
+  led_strip.set_color(LED_SECTION_STATUS, 128, 0, 0);
+  // led_strip.on(LED_SECTION_STATUS);
+  led_strip.off(LED_SECTION_1);
 
   Serial.print("finished setup!");
 }
@@ -115,4 +115,14 @@ void loop() {
   pir.loop();
 
   led_strip.loop();
+
+  static boolean mqtt_state = false;
+  if (mqtt_state != mqtt.connected()){
+    mqtt_state = mqtt.connected();
+    if (mqtt_state){
+      led_strip.on(LED_SECTION_STATUS);
+    } else {
+      led_strip.off(LED_SECTION_STATUS);
+    }
+  }
 }
