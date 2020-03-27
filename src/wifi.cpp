@@ -1,7 +1,7 @@
 #include "wifi.hpp"
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
-#include <ESP8266SSDP.h>
+// #include <ESP8266SSDP.h>
 #include <ESP8266NetBIOS.h>
 #include <ESP8266mDNS.h>
 #include <ESP8266HTTPUpdateServer.h>
@@ -26,10 +26,10 @@ void http_setup(void)
         Serial.println("HTTP: GET /index.html");
     });
 
-    HTTP.on("/description.xml", HTTP_GET, [](){
-        SSDP.schema(HTTP.client());
-        Serial.println("HTTP: GET /description.xml");
-    });
+    // HTTP.on("/description.xml", HTTP_GET, [](){
+    //     SSDP.schema(HTTP.client());
+    //     Serial.println("HTTP: GET /description.xml");
+    // });
 
     HTTP.onNotFound([](){
         String message = "File Not Found\n\n";
@@ -49,10 +49,10 @@ void http_setup(void)
         Serial.println(HTTP.uri());
     });
 
-    SSDP.setSchemaURL("description.xml");
-    SSDP.setHTTPPort(80);
-    SSDP.setName("ESP8266 - Test");
-    SSDP.setURL("index.html");
+    // SSDP.setSchemaURL("description.xml");
+    // SSDP.setHTTPPort(80);
+    // SSDP.setName("ESP8266 - Test");
+    // SSDP.setURL("index.html");
     // SSDP.setName("Philips hue clone");
     // SSDP.setSerialNumber("001788102201");
     // SSDP.setURL("index.html");

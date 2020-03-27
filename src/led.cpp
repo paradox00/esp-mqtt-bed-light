@@ -16,10 +16,6 @@ LedStrip::LedStrip(const int pixelCount, const int pixelPin, const int _sections
     _sections = new Sections[_sections_num];
 }
 
-void LedStrip::setMaxBrightness(uint8_t brightness){
-    _strip.SetBrightness(brightness);
-}
-
 void LedStrip::BlendAnimUpdate(const AnimationParam& param)
 {
     // this gets called for each animation on every time step
@@ -32,8 +28,8 @@ void LedStrip::BlendAnimUpdate(const AnimationParam& param)
         param.progress);
 
     // apply the color to the strip
-    for (uint16_t pixel = _sections[param.index].start; 
-         pixel <= _sections[param.index].last; 
+    for (uint16_t pixel = _sections[param.index].start_led; 
+         pixel <= _sections[param.index].last_led; 
          pixel++) {
         _strip.SetPixelColor(pixel, updatedColor);
     }
@@ -54,21 +50,54 @@ void LedStrip::loop()
 
 void LedStrip::on(int section_num)
 {
-    // _state = false;
-    // toggle();
+    RgbColor color = _sections[section_num].color;
+    int brightness = _sections[section_num].brightness * 255 / color.CalculateBrightness();
+    color = color.Dim(brightness);
+    // Serial.printf("Brightness: %d start: (%d,%d,%d) final: (%d,%d,%d)\n", brightness,
+    //               _sections[section_num].color.R, _sections[section_num].color.G, _sections[section_num].color.B,
+    //               color.R, color.G, color.B);
 
-    _animations_param[section_num].StartingColor = _strip.GetPixelColor(_sections[section_num].start);
-    _animations_param[section_num].EndingColor = _sections[section_num].color; //RgbColor(0, 0, colorSaturation);
+    _animations_param[section_num].StartingColor = _strip.GetPixelColor(_sections[section_num].start_led);
+    _animations_param[section_num].EndingColor = color;
     _animations.StartAnimation(section_num, ANIM_DURATION_ON, [this](const AnimationParam &param) {
         this->BlendAnimUpdate(param);
     });
+
+    _sections[section_num].state = true;
 }
 
 void LedStrip::off(int section_num)
 {
-    _animations_param[section_num].StartingColor = _strip.GetPixelColor(_sections[section_num].start);
+    _animations_param[section_num].StartingColor = _strip.GetPixelColor(_sections[section_num].start_led);
     _animations_param[section_num].EndingColor = RgbColor(0, 0, 0);
     _animations.StartAnimation(section_num, ANIM_DURATION_OFF, [this](const AnimationParam &param) {
         this->BlendAnimUpdate(param);
     });
+
+    _sections[section_num].state = false;
+}
+
+void LedStrip::set_color(int sec_num, int r, int g, int b) { 
+    _sections[sec_num].color = RgbColor(r, g, b); 
+    if (_sections[sec_num].state){
+        on(sec_num);
+    }
+}
+
+void LedStrip::setBrightness(int sec_num, uint8_t brightness) { 
+    _sections[sec_num].brightness = brightness; 
+
+    if (_sections[sec_num].state){
+        on(sec_num);
+    } 
+}
+
+void LedStrip::get_color_str(int sec_num, char *str, size_t size){
+    snprintf(str, size, "%d,%d,%d", _sections[sec_num].color.R, _sections[sec_num].color.G, _sections[sec_num].color.B);
+}
+void LedStrip::get_state_str(int sec_num, char *str, size_t size){
+    snprintf(str, size, "%s", _sections[sec_num].state ? "ON" : "OFF");
+}
+void LedStrip::get_brightness_str(int sec_num, char *str, size_t size){
+    snprintf(str, size, "%d", _sections[sec_num].brightness);
 }
