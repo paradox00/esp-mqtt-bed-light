@@ -7,6 +7,7 @@
 #include "led.hpp"
 #include "button.hpp"
 #include "mqtt.hpp"
+#include "timer.hpp"
 
 #define WIFI_SSID "***REMOVED***"
 #define WIFI_PWD  "***REMOVED***"
@@ -81,20 +82,36 @@ Button button(D2);
 Button pir1(D1); // D1
 Button pir2(D5); // D6
 
+enum {
+  TIMER_PIR1 = 0,
+  TIMER_PIR2,
+  TIMER_LAST
+};
+Timer timer(TIMER_LAST);
+
 void pir_set(void *ctx){
   int num = (int)ctx;
   if (!global_on) {
     led_strip.on(num);
+    timer.enable_timer(num);
   }
+
   mqtt.publish(mqtt_topic_pir[num], "ON");
 }
 
 void pir_unset(void *ctx){
   int num = (int)ctx;
+  
+  mqtt.publish(mqtt_topic_pir[num], "OFF");
+}
+
+void pir_timer(void *ctx){
+  printf("pir timer: %p\n", ctx);
+  int num = (int)ctx;
   if (!global_on) {
     led_strip.off(num);
   }
-  mqtt.publish(mqtt_topic_pir[num], "OFF");
+  timer.disable_timer(num);
 }
 
 void mqtt_send_state(){
@@ -282,12 +299,18 @@ void setup() {
   led_strip.setBrightness(LED_SECTION_GLOBAL, 10);
   led_strip.off(LED_SECTION_GLOBAL);
 
+  for (int i = 0; i < PIR_COUNT; i++){
+    timer.add_timer(i, 60, pir_timer, (void *)i);
+  }
+
   Serial.println("finished setup!");
 }
 
 void mqtt_discovery_global(void);
 
 void loop() {
+  timer.loop();
+
   wifi_loop();
   mqtt.loop();
 

@@ -1,5 +1,6 @@
-#ifndef __MQTT__
-#define __MQTT__
+#pragma once
+
+#include <functional>
 
 #include <WiFiClient.h>
 #include <PubSubClient.h>
@@ -53,6 +54,73 @@ public:
     PubSubClient *get_mqtt() { return &_mqtt; };
 
     void _debug_msg(char *topic, byte *payload, unsigned int length);
+
+    const char *get_online_topic(){ return _online_topic; }
 };
 
-#endif
+class MQTTDev{
+public:
+    MQTTDev(MQTTService *mqtt,
+            const char *name,
+            const char *topic_discovery,
+            const char *topic_state);
+
+    void discovery_send_message();
+
+    void discovery_add_info(JsonObject *device_info);
+    virtual void discovery_add_dev_properties(JsonObject *root) = 0;
+
+    void publish_state(bool state);
+    //virtual void publish_full_state(); // TODO
+
+protected:
+    MQTTService *_mqtt;
+    const char *_name;
+    const char *_topic_discovery;
+    const char *_topic_state;
+};
+
+
+class MQTTBinarySensor: public MQTTDev{
+public:
+    MQTTBinarySensor(MQTTService *mqtt,
+                     const char *name,
+                     const char *topic_discovery,
+                     const char *dev_class,
+                     const char *topic_state);
+
+    void discovery_add_dev_properties(JsonObject *root) override;
+
+private:
+    const char *_dev_class;
+};
+
+class MQTTLight: public MQTTDev{
+public:
+    MQTTLight(MQTTService *mqtt,
+              const char *name,
+              const char *topic_discovery,
+              const char *topic_state,
+              const char *topic_brightness,
+              const char *topic_color,
+              const char *topic_cmd,
+              const char *topic_cmd_brigtness,
+              const char *topic_cmd_color);
+
+    void set_cb_state(std::function<void(bool)> cb);
+    void set_cb_brigtness(std::function<void(uint8_t)> cb);
+    void set_cb_color(std::function<void(uint8_t, uint8_t, uint8_t)> cb);
+
+    void discovery_add_dev_properties(JsonObject *device_info) override;
+
+    void publish_brigtness(uint8_t brightness);
+    void publish_color(uint8_t r, uint8_t g, uint8_t b);
+
+private:
+    const char *topic_brightness;
+    const char *topic_color;
+    const char *topic_cmd;
+    const char *topic_cmd_brigtness;
+    const char *topic_cmd_color;
+};
+

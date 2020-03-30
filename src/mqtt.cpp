@@ -1,5 +1,6 @@
-#include "mqtt.hpp"
 #include <ESP8266WiFi.h>
+#include <ArduinoJson.h>
+#include "mqtt.hpp"
 
 MQTTService::MQTTService(const char * mqtt_server, 
                 const char *online_topic,
@@ -90,4 +91,59 @@ void MQTTService::loop(){
     _last_retry_time = millis();
 
     _mqtt.loop();
+}
+
+MQTTDev::MQTTDev(MQTTService *mqtt,
+            const char *name,
+            const char *topic_discovery,
+            const char *topic_state) : 
+_mqtt(mqtt), _name(name), _topic_discovery(topic_discovery), _topic_state(topic_state)
+{
+}
+
+void MQTTDev::discovery_add_info(JsonObject *device_info){
+    uint8_t mac[6];
+    char mac_str[6*3];
+    WiFi.macAddress(mac);
+    snprintf(mac_str, sizeof(mac_str), "%02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
+    (*device_info)["identifiers"] = mac_str;
+    (*device_info)["name"] = WiFi.hostname();
+    (*device_info)["manufacturer"] = "Aviv B.D.";
+}
+
+void MQTTDev::discovery_send_message(){
+    DynamicJsonDocument root(1024);
+    root["name"] = _name;
+    root["unique_id"] = _name;
+    root["availability_topic"] = _mqtt->get_online_topic();
+    root["state_topic"] = _topic_state;
+
+    JsonObject root_object = root.as<JsonObject>();
+    discovery_add_dev_properties(&root_object);
+
+    JsonObject device_info = root.createNestedObject("device");
+    discovery_add_info(&device_info);
+
+    _mqtt->get_mqtt()->beginPublish(_topic_discovery, measureJson(root), false);
+    serializeJson(root, *_mqtt->get_mqtt());
+    _mqtt->get_mqtt()->endPublish();
+}
+
+void MQTTDev::publish_state(bool state){
+    const char *msg = state ? "ON" : "OFF";
+    _mqtt->publish(_topic_state, msg);
+}
+
+MQTTBinarySensor::MQTTBinarySensor(MQTTService *mqtt,
+                                   const char *name,
+                                   const char *topic_discovery,
+                                   const char *dev_class,
+                                   const char *topic_state) : 
+    MQTTDev(mqtt, name, topic_discovery, topic_state),
+    _dev_class(dev_class)
+{}
+
+void MQTTBinarySensor::discovery_add_dev_properties(JsonObject *root){
+    (*root)["device_class"] = "motion";
 }
