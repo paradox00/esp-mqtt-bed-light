@@ -27,6 +27,12 @@ public:
     void get_state_str(int sec_num, char *str, size_t size);
     void get_brightness_str(int sec_num, char *str, size_t size);
 
+    uint8_t get_state(int sec_num) { return _sections[sec_num].state; }
+    uint8_t get_brightness(int sec_num) { return _sections[sec_num].brightness; }
+    uint8_t get_color_r(int sec_num) { return _sections[sec_num].color.R; }
+    uint8_t get_color_g(int sec_num) { return _sections[sec_num].color.G; }
+    uint8_t get_color_b(int sec_num) { return _sections[sec_num].color.B; }
+
 private:
     static constexpr int ANIM_DURATION_ON = 100;
     static constexpr int ANIM_DURATION_OFF = 500;

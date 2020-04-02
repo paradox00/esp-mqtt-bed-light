@@ -75,6 +75,11 @@ boolean MQTTService::connect(){
         for (int i = 0; i < _last_subscribed; i++){
             _mqtt.subscribe(_subscribes[i].topic);
         }
+
+        for (int i = 0; i < _last_connect; i++) {
+            _connect_cb[i]();
+        }
+
         Serial.println("MQTT: connected");
     }
 
@@ -93,12 +98,26 @@ void MQTTService::loop(){
     _mqtt.loop();
 }
 
+void MQTTService::register_connect_cb(std::function < void(void)> cb){
+    if (_last_connect >= MAX_SUBSCRIBES){
+        return;
+    }
+
+    _connect_cb[_last_connect++] = cb;
+}
+
 MQTTDev::MQTTDev(MQTTService *mqtt,
             const char *name,
             const char *topic_discovery,
             const char *topic_state) : 
 _mqtt(mqtt), _name(name), _topic_discovery(topic_discovery), _topic_state(topic_state)
 {
+    mqtt->register_connect_cb([this]() { this->on_connect(); });
+}
+
+void MQTTDev::on_connect(){
+    this->discovery_send_message();
+    this->publish_full_state();
 }
 
 void MQTTDev::discovery_add_info(JsonObject *device_info){
@@ -125,7 +144,7 @@ void MQTTDev::discovery_send_message(){
     JsonObject device_info = root.createNestedObject("device");
     discovery_add_info(&device_info);
 
-    _mqtt->get_mqtt()->beginPublish(_topic_discovery, measureJson(root), false);
+    _mqtt->get_mqtt()->beginPublish(_topic_discovery, measureJson(root), true);
     serializeJson(root, *_mqtt->get_mqtt());
     _mqtt->get_mqtt()->endPublish();
 }
@@ -146,4 +165,152 @@ MQTTBinarySensor::MQTTBinarySensor(MQTTService *mqtt,
 
 void MQTTBinarySensor::discovery_add_dev_properties(JsonObject *root){
     (*root)["device_class"] = "motion";
+}
+
+MQTTLight::MQTTLight(MQTTService *mqtt,
+                     const char *name,
+                     const char *topic_discovery,
+                     const char *topic_state,
+                     const char *topic_brightness,
+                     const char *topic_color,
+                     const char *topic_cmd,
+                     const char *topic_cmd_brigtness,
+                     const char *topic_cmd_color) : 
+    MQTTDev(mqtt, name, topic_discovery, topic_state),
+    _topic_brightness(topic_brightness),
+    _topic_color(topic_color),
+    _topic_cmd(topic_cmd),
+    _topic_cmd_brigtness(topic_cmd_brigtness),
+    _topic_cmd_color(topic_cmd_color)
+{
+}
+
+void MQTTLight::set_cb_state(std::function<void(bool)> cb){
+    _cb_state = cb;
+
+    _mqtt->subscribe(_topic_cmd, [this](char *topic, uint8_t *payload, uint length) {
+        this->parse_state(topic, payload, length);
+    });
+}
+void MQTTLight::set_cb_brigtness(std::function<void(uint8_t)> cb){
+    _cb_brightness = cb;
+
+    _mqtt->subscribe(_topic_cmd_brigtness, [this](char *topic, uint8_t *payload, uint length) {
+        this->parse_brightness(topic, payload, length);
+    });
+}
+void MQTTLight::set_cb_color(std::function<void(uint8_t, uint8_t, uint8_t)> cb){
+    _cb_color = cb;
+
+    _mqtt->subscribe(_topic_cmd_color, [this](char *topic, uint8_t *payload, uint length) {
+        this->parse_color(topic, payload, length);
+    });
+}
+
+void MQTTLight::discovery_add_dev_properties(JsonObject *root) {
+    (*root)["command_topic"] = _topic_cmd;
+
+    (*root)["brightness_command_topic"] = _topic_cmd_brigtness;
+    (*root)["brightness_state_topic"] = _topic_brightness;
+
+    (*root)["rgb_command_topic"] = _topic_cmd_color;
+    (*root)["rgb_state_topic"] = _topic_color;
+
+    // root["retain"] = true; // TODO
+}
+
+void MQTTLight::publish_brigtness(uint8_t brightness){
+    char tmp[4];
+    snprintf(tmp, sizeof(tmp), "%d", brightness);
+    _mqtt->publish(_topic_brightness, tmp);
+}
+void MQTTLight::publish_color(uint8_t r, uint8_t g, uint8_t b){
+    char tmp[4 * 3];
+    snprintf(tmp, sizeof(tmp), "%d,%d,%d", r, g, b);
+    _mqtt->publish(_topic_color, tmp);
+}
+
+void MQTTLight::parse_state(char *topic, uint8_t *payload, unsigned int length){
+    char tmp[4];
+    memcpy(tmp, payload, min(length, (uint)sizeof(tmp)));
+    tmp[min(length + 1, (uint)sizeof(tmp)) - 1] = '\0';
+
+    bool state;
+    if (strcmp(tmp, "ON") == 0)
+    {
+        state = true;
+    }
+    else if (strcmp(tmp, "OFF") == 0)
+    {
+        state = false; 
+    } else {
+        return;
+    }
+
+    _cb_state(state);
+    publish_state(state);
+}
+
+void MQTTLight::parse_brightness(char *topic, uint8_t *payload, unsigned int length) {
+    char tmp[4];
+
+    memcpy(tmp, payload, min(length, (uint)sizeof(tmp)));
+    tmp[min(length + 1, (uint)sizeof(tmp)) - 1] = '\0';
+
+    uint8_t brigtness = atoi(tmp);
+
+    _cb_brightness(brigtness);
+    publish_brigtness(brigtness);
+}
+
+void MQTTLight::parse_color(char *topic, uint8_t *payload, unsigned int length) {
+    /* parse input in form of rrr,ggg,bbb */
+    char tmp[3][4] = {0};
+    uint8_t current_comma = 0;
+    uint8_t current_char = 0;
+    for (uint8_t i = 0; i < length; i++)
+    {
+        switch (payload[i])
+        {
+        case '\0':
+            break;
+
+        case ',':
+            if (current_comma > 2)
+            {
+                return;
+            }
+            tmp[current_comma][current_char] = '\0';
+            current_char = 0;
+            current_comma++;
+            break;
+        default:
+            if (sizeof(tmp[current_comma]) > current_char)
+            {
+                // Serial.printf("%d: [%d][%d] = %c\n", i, current_comma, current_char, payload[i]);
+                tmp[current_comma][current_char++] = payload[i];
+            }
+            break;
+        }
+    }
+
+    uint8_t color[3];
+    for (uint8_t i = 0; i < sizeof(color); i++)
+    {
+        color[i] = atoi(tmp[i]);
+        // Serial.printf("%d: %s -> %d\n", i, tmp[i], color[i]);
+    }
+
+    _cb_color(color[0], color[1], color[2]);
+    publish_color(color[0], color[1], color[2]);
+}
+
+void MQTTLight::publish_full_state(){
+    if (_cb_get_state == nullptr){
+        return;
+    }
+    State state = _cb_get_state();
+    publish_state(state.state);
+    publish_brigtness(state.brightness);
+    publish_color(state.color[0], state.color[1], state.color[2]);
 }

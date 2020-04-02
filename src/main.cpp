@@ -8,10 +8,7 @@
 #include "button.hpp"
 #include "mqtt.hpp"
 #include "timer.hpp"
-
-#define WIFI_SSID "***REMOVED***"
-#define WIFI_PWD  "***REMOVED***"
-#define WIFI_DEV_NAME "esp-bed_light"
+#include "secrets.hpp"
 
 enum
 {
@@ -49,6 +46,8 @@ const char *mqtt_topic_global_state = MQTT_TOPIC_BASE "/global/state";
 const char *mqtt_topic_global_color = MQTT_TOPIC_BASE "/global/color";
 const char *mqtt_topic_global_brightness = MQTT_TOPIC_BASE "/global/brightness";
 
+#define mqtt_topic_light_pir_state(x, s) MQTT_TOPIC_BASE "/pir" #x "/" s
+
 const char *mqtt_topic_cmd1 = MQTT_TOPIC_CMDS "/light1";
 const char *mqtt_topic_cmd2 = MQTT_TOPIC_CMDS "/light2";
 
@@ -56,16 +55,23 @@ const char *mqtt_topic_global_cmd = MQTT_TOPIC_CMDS "/global";
 const char *mqtt_topic_global_color_cmd = MQTT_TOPIC_CMDS "/global_color";
 const char *mqtt_topic_global_brightness_cmd = MQTT_TOPIC_CMDS "/global_brightness";
 
+#define mqtt_topic_light_pir_cmd(x, s) MQTT_TOPIC_CMDS "/light_pir" #x "_" s
+
 const char *mqtt_topic_hass_pir1 = "hass/binary_sensor/bed_light/0/config";
 const char *mqtt_topic_hass_pir2 = "hass/binary_sensor/bed_light/1/config";
 const char *mqtt_topic_hass_global = "hass/light/bed_light/1/config";
+#define mqtt_topic_hass_light_pir(x) "hass/light/bed_light/1" #x "/config"
+
 const char *mqtt_topic_hass_pir[] = {mqtt_topic_hass_pir1, mqtt_topic_hass_pir2};
 
-const char* mqtt_server = "***REMOVED***";
+const char* mqtt_server = MQTT_SERVER;
 
 int pin_button = 4; //D2(gpio4)
 
-bool global_on = false;
+bool G_global_on = false;
+bool G_pir_light_1 = true;
+bool G_pir_light_2 = true;
+bool *G_pir_light[] = { &G_pir_light_1, &G_pir_light_2};
 
 // WiFiClient mqttClient;
 // PubSubClient mqtt(mqttClient);
@@ -82,6 +88,12 @@ Button button(D2);
 Button pir1(D1); // D1
 Button pir2(D5); // D6
 
+MQTTBinarySensor mqtt_pir1(&mqtt, "bed_light_pir_0", mqtt_topic_hass_pir1, "motion", mqtt_topic_pir1);
+MQTTBinarySensor mqtt_pir2(&mqtt, "bed_light_pir_1", mqtt_topic_hass_pir2, "motion", mqtt_topic_pir2);
+MQTTLight mqtt_light_global(&mqtt, "bed_light_global", mqtt_topic_hass_global, mqtt_topic_global_state, mqtt_topic_global_brightness, mqtt_topic_global_color, mqtt_topic_global_cmd, mqtt_topic_global_brightness_cmd, mqtt_topic_global_color_cmd);
+MQTTLight mqtt_light_pir1(&mqtt, "bed_light_pir_0", mqtt_topic_hass_light_pir(0), mqtt_topic_light_pir_state(0, "state"), mqtt_topic_light_pir_state(0, "brightness"), mqtt_topic_light_pir_state(0, "color"), mqtt_topic_light_pir_cmd(0, "cmd"), mqtt_topic_light_pir_cmd(0, "brightness"), mqtt_topic_light_pir_cmd(0, "color"));
+MQTTLight mqtt_light_pir2(&mqtt, "bed_light_pir_1", mqtt_topic_hass_light_pir(1), mqtt_topic_light_pir_state(1, "state"), mqtt_topic_light_pir_state(1, "brightness"), mqtt_topic_light_pir_state(1, "color"), mqtt_topic_light_pir_cmd(1, "cmd"), mqtt_topic_light_pir_cmd(1, "brightness"), mqtt_topic_light_pir_cmd(1, "color"));
+
 enum {
   TIMER_PIR1 = 0,
   TIMER_PIR2,
@@ -91,24 +103,31 @@ Timer timer(TIMER_LAST);
 
 void pir_set(void *ctx){
   int num = (int)ctx;
-  if (!global_on) {
+  if (!G_global_on && *G_pir_light[num]) {
     led_strip.on(num);
     timer.enable_timer(num);
   }
 
-  mqtt.publish(mqtt_topic_pir[num], "ON");
+  if (num == 0){
+    mqtt_pir1.publish_state(true);
+  } else {
+    mqtt_pir2.publish_state(true);
+  }
 }
 
 void pir_unset(void *ctx){
   int num = (int)ctx;
-  
-  mqtt.publish(mqtt_topic_pir[num], "OFF");
+  if (num == 0){
+    mqtt_pir1.publish_state(false);
+  } else {
+    mqtt_pir2.publish_state(false);
+  }
 }
 
 void pir_timer(void *ctx){
   printf("pir timer: %p\n", ctx);
   int num = (int)ctx;
-  if (!global_on) {
+  if (!G_global_on) {
     led_strip.off(num);
   }
   timer.disable_timer(num);
@@ -127,136 +146,51 @@ void mqtt_send_state(){
   mqtt.publish(mqtt_topic_global_brightness, tmp);
 }
 
-void mqtt_discovery_add_device_info(JsonObject &device_info) {
-  uint8_t mac[6];
-  char mac_str[6*3];
-  WiFi.macAddress(mac);
-  snprintf(mac_str, sizeof(mac_str), "%02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+// void mqtt_discovery_all(){
+//   mqtt_light_global.discovery_send_message();
+//   mqtt_pir1.discovery_send_message();
+//   mqtt_pir2.discovery_send_message();
+//   mqtt_light_pir1.discovery_send_message();
+//   mqtt_light_pir2.discovery_send_message();
+// }
 
-  device_info["identifiers"] = mac_str;
-  device_info["name"] = WiFi.hostname();
-  device_info["manufacturer"] = "Aviv B.D.";
-}
-
-void mqtt_discovery_global(){
-  DynamicJsonDocument root(1024);
-  root["name"] = "bed_light_global";
-  root["unique_id"] = "bed_light_global";
-  root["availability_topic"] = mqtt_topic_avail;
-  root["state_topic"] = mqtt_topic_global_state;
-  root["command_topic"] = mqtt_topic_global_cmd;
-
-  root["brightness_command_topic"] = mqtt_topic_global_brightness_cmd;
-  root["brightness_state_topic"] = mqtt_topic_global_brightness;
-
-  root["rgb_command_topic"] = mqtt_topic_global_color_cmd;
-  root["rgb_state_topic"] = mqtt_topic_global_color;
-
-  // root["retain"] = true; // TODO
-
-  JsonObject device_info = root.createNestedObject("device");
-  mqtt_discovery_add_device_info(device_info);
-
-  mqtt.get_mqtt()->beginPublish(mqtt_topic_hass_global, measureJson(root), false);
-  serializeJson(root, *mqtt.get_mqtt());
-  int result = mqtt.get_mqtt()->endPublish();
-  Serial.printf("discovery result %d\n", result);
-}
-
-void mqtt_discovery_pirs(){
-
-  for (int i = 0; i < PIR_COUNT; i++){
-    char name[30];
-    snprintf(name, sizeof(name), "bed_light_pir_%d", i);
-    DynamicJsonDocument root(1024);
-
-    root["name"] = name;
-    root["unique_id"] = name;
-    root["availability_topic"] = mqtt_topic_avail;
-    root["device_class"] = "motion";
-    root["state_topic"] = mqtt_topic_pir[i];
-
-    JsonObject device_info = root.createNestedObject("device");
-    mqtt_discovery_add_device_info(device_info);
-
-    mqtt.get_mqtt()->beginPublish(mqtt_topic_hass_pir[i], measureJson(root), false);
-    serializeJson(root, *mqtt.get_mqtt());
-    int result = mqtt.get_mqtt()->endPublish();
-    Serial.printf("discovery result %d\n", result);
+void cb_light_state(int section, bool state){
+  G_global_on = state;
+  if (state){
+    led_strip.on(section);
+  } else {
+    led_strip.off(section);
   }
 }
 
-void mqtt_discovery_all(){
-  mqtt_discovery_global();
-  mqtt_discovery_pirs();
+void cb_light_brightness(int section, uint8_t brightness){
+  led_strip.setBrightness(section, brightness);
 }
 
-void mqtt_cb_global_on(char *topic, byte *payload, unsigned int length){
-  char tmp[4];
-  memcpy(tmp, payload, min(length, (uint)sizeof(tmp)));
-  tmp[min(length + 1, (uint)sizeof(tmp)) - 1] = '\0';
-
-  if (strcmp(tmp, "ON") == 0){
-    led_strip.on(LED_SECTION_GLOBAL);
-    global_on = true;
-    mqtt.publish(mqtt_topic_global_state, "ON");
-  } else if (strcmp(tmp, "OFF") == 0){
-    led_strip.off(LED_SECTION_GLOBAL);
-    global_on = false;
-    mqtt.publish(mqtt_topic_global_state, "OFF");
-  }
+void cb_light_color(int section, uint8_t r, uint8_t g, uint8_t b){
+  led_strip.set_color(section, r, g, b);
 }
 
-void mqtt_cb_global_brightness(char *topic, byte *payload, unsigned int length){
-  char tmp[4];
+MQTTLight::State cb_light_state(int section){
+  MQTTLight::State state;
+  state.state = led_strip.get_state(section);
+  state.brightness = led_strip.get_brightness(section);
+  state.color[0] = led_strip.get_color_r(section);
+  state.color[1] = led_strip.get_color_g(section);
+  state.color[2] = led_strip.get_color_b(section);
 
-  memcpy(tmp, payload, min(length, (uint)sizeof(tmp)));
-  tmp[min(length + 1, (uint)sizeof(tmp)) - 1] = '\0';
-
-  uint8_t brigtness = atoi(tmp);
-  led_strip.setBrightness(LED_SECTION_GLOBAL, brigtness);
-
-  mqtt.publish(mqtt_topic_global_brightness, tmp);
+  return state;
 }
 
-void mqtt_cb_global_color(char *topic, byte *payload, unsigned int length){
-  /* parse input in form of rrr,ggg,bbb */
-  char tmp[3][4] = {0};
-  uint8_t current_comma = 0;
-  uint8_t current_char = 0;
-  for (uint8_t i = 0; i < length; i++){
-    switch (payload[i]) {
-    case '\0':
-      break;
+MQTTLight::State cb_light_pir_state(int section){
+  MQTTLight::State state;
+  state.state = *G_pir_light[section];
+  state.brightness = led_strip.get_brightness(section);
+  state.color[0] = led_strip.get_color_r(section);
+  state.color[1] = led_strip.get_color_g(section);
+  state.color[2] = led_strip.get_color_b(section);
 
-    case ',':
-      if (current_comma > 2){
-        return;
-      }
-      tmp[current_comma][current_char] = '\0';
-      current_char = 0;
-      current_comma++;
-      break;
-    default:
-      if (sizeof(tmp[current_comma]) > current_char){
-        // Serial.printf("%d: [%d][%d] = %c\n", i, current_comma, current_char, payload[i]);
-        tmp[current_comma][current_char++] = payload[i];
-      }
-      break;
-    }
-  }
-  
-  uint8_t color[3];
-  for (uint8_t i = 0; i < sizeof(color); i++){
-    color[i] = atoi(tmp[i]);
-    // Serial.printf("%d: %s -> %d\n", i, tmp[i], color[i]);
-  }
-
-  led_strip.set_color(LED_SECTION_GLOBAL, color[0], color[1], color[2]);
-
-  char str[4 * 3 + 1];
-  snprintf(str, sizeof(str), "%d,%d,%d", color[0], color[1], color[2]);
-  mqtt.publish(mqtt_topic_global_color, str);
+  return state;
 }
 
 void setup() {
@@ -276,10 +210,20 @@ void setup() {
 
   wifi_setup(WIFI_SSID, WIFI_PWD, WIFI_DEV_NAME);
 
-  mqtt.subscribe(mqtt_topic_global_cmd, mqtt_cb_global_on);
-  mqtt.subscribe(mqtt_topic_global_brightness_cmd, mqtt_cb_global_brightness);
-  mqtt.subscribe(mqtt_topic_global_color_cmd, mqtt_cb_global_color);
+  mqtt_light_global.set_cb_state([](bool state) { cb_light_state(LED_SECTION_GLOBAL, state); });
+  mqtt_light_global.set_cb_brigtness([](uint8_t brightness) { cb_light_brightness(LED_SECTION_GLOBAL, brightness); });
+  mqtt_light_global.set_cb_color([](uint8_t r, uint8_t g, uint8_t b) { cb_light_color(LED_SECTION_GLOBAL, r, g, b); });
+  mqtt_light_global.current_state_cb([]() { return cb_light_state(LED_SECTION_GLOBAL); });
 
+  mqtt_light_pir1.set_cb_state([](bool state) { G_pir_light_1 = state; if (!state) led_strip.off(LED_SECTION_1); });
+  mqtt_light_pir1.set_cb_brigtness([](uint8_t brightness) { cb_light_brightness(LED_SECTION_1, brightness); });
+  mqtt_light_pir1.set_cb_color([](uint8_t r, uint8_t g, uint8_t b) { cb_light_color(LED_SECTION_1, r, g, b); });
+  mqtt_light_pir1.current_state_cb([]() { return cb_light_pir_state(LED_SECTION_1); });
+  mqtt_light_pir2.set_cb_state([](bool state) { G_pir_light_2 = state; if (!state) led_strip.off(LED_SECTION_2); });
+  mqtt_light_pir2.set_cb_brigtness([](uint8_t brightness) { cb_light_brightness(LED_SECTION_2, brightness); });
+  mqtt_light_pir2.set_cb_color([](uint8_t r, uint8_t g, uint8_t b) { cb_light_color(LED_SECTION_2, r, g, b); });
+  mqtt_light_pir2.current_state_cb([]() { return cb_light_pir_state(LED_SECTION_2); });
+  
   led_strip.setup();
   led_strip.add_section(LED_SECTION_1, 1, 90);
   led_strip.add_section(LED_SECTION_2, 91, 179);
@@ -325,7 +269,7 @@ void loop() {
     mqtt_state = mqtt.connected();
     if (mqtt_state){
       led_strip.on(LED_SECTION_STATUS);
-      mqtt_discovery_all();
+      // mqtt_discovery_all();
       mqtt_send_state();
     } else {
       led_strip.off(LED_SECTION_STATUS);
