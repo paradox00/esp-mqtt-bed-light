@@ -225,7 +225,7 @@ void setup() {
   mqtt_light_pir2.current_state_cb([]() { return cb_light_pir_state(LED_SECTION_2); });
   
   led_strip.setup();
-  led_strip.add_section(LED_SECTION_1, 1, 90);
+  led_strip.add_section(LED_SECTION_1, 0, 90);
   led_strip.add_section(LED_SECTION_2, 91, 179);
   led_strip.add_section(LED_SECTION_STATUS, 0, 0);
 
@@ -236,7 +236,8 @@ void setup() {
   led_strip.setBrightness(LED_SECTION_2, 255 * 5 / 100);
 
   led_strip.set_color(LED_SECTION_STATUS, 255, 0, 0);
-  led_strip.off(LED_SECTION_1);
+  led_strip.setBrightness(LED_SECTION_STATUS, 2);
+  led_strip.on(LED_SECTION_STATUS);
 
   led_strip.add_section(LED_SECTION_GLOBAL, 1, 179);
   led_strip.set_color(LED_SECTION_GLOBAL, 255, 255, 255);
@@ -253,6 +254,19 @@ void setup() {
 void mqtt_discovery_global(void);
 
 void loop() {
+  static bool mqtt_state = false;
+  bool new_mqtt_state = mqtt.connected();
+  if (mqtt_state != new_mqtt_state){
+    mqtt_state = new_mqtt_state;
+    if (mqtt_state){
+      led_strip.off(LED_SECTION_STATUS);
+      // mqtt_discovery_all();
+      // mqtt_send_state();
+    } else {
+      led_strip.on(LED_SECTION_STATUS);
+    }
+  }
+
   timer.loop();
 
   wifi_loop();
@@ -263,16 +277,4 @@ void loop() {
   pir2.loop();
 
   led_strip.loop();
-
-  static boolean mqtt_state = false;
-  if (mqtt_state != mqtt.connected()){
-    mqtt_state = mqtt.connected();
-    if (mqtt_state){
-      led_strip.on(LED_SECTION_STATUS);
-      // mqtt_discovery_all();
-      mqtt_send_state();
-    } else {
-      led_strip.off(LED_SECTION_STATUS);
-    }
-  }
 }

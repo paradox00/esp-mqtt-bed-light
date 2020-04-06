@@ -13,6 +13,7 @@ public:
     void add_section(int num, uint16_t start, uint16_t last){
         _sections[num].start_led = start;
         _sections[num].last_led = last;
+        _sections[num].brightness = 255;
     }
 
     void on(int section_num = 0);

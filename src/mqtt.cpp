@@ -216,7 +216,7 @@ void MQTTLight::discovery_add_dev_properties(JsonObject *root) {
     (*root)["rgb_command_topic"] = _topic_cmd_color;
     (*root)["rgb_state_topic"] = _topic_color;
 
-    // root["retain"] = true; // TODO
+    (*root)["retain"] = true; // TODO
 }
 
 void MQTTLight::publish_brigtness(uint8_t brightness){
