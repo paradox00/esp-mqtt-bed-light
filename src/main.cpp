@@ -86,7 +86,7 @@ LedStrip led_strip(PixelCount, PixelPin, LED_SECTION_LAST);
 
 Button button(D2);
 Button pir1(D1); // D1
-Button pir2(D5); // D6
+Button pir2(D5); // D5
 
 MQTTBinarySensor mqtt_pir1(&mqtt, "bed_light_pir_0", mqtt_topic_hass_pir1, "motion", mqtt_topic_pir1);
 MQTTBinarySensor mqtt_pir2(&mqtt, "bed_light_pir_1", mqtt_topic_hass_pir2, "motion", mqtt_topic_pir2);
@@ -133,19 +133,6 @@ void pir_timer(void *ctx){
   timer.disable_timer(num);
 }
 
-void mqtt_send_state(){
-  char tmp[20];
-
-  led_strip.get_color_str(LED_SECTION_GLOBAL, tmp, sizeof(tmp));
-  mqtt.publish(mqtt_topic_global_color, tmp);
-
-  led_strip.get_state_str(LED_SECTION_GLOBAL, tmp, sizeof(tmp));
-  mqtt.publish(mqtt_topic_global_state, tmp);
-
-  led_strip.get_brightness_str(LED_SECTION_GLOBAL, tmp, sizeof(tmp));
-  mqtt.publish(mqtt_topic_global_brightness, tmp);
-}
-
 // void mqtt_discovery_all(){
 //   mqtt_light_global.discovery_send_message();
 //   mqtt_pir1.discovery_send_message();
@@ -157,6 +144,8 @@ void mqtt_send_state(){
 void cb_light_state(int section, bool state){
   G_global_on = state;
   if (state){
+    led_strip.off_soft(LED_SECTION_1);
+    led_strip.off_soft(LED_SECTION_2);
     led_strip.on(section);
   } else {
     led_strip.off(section);
@@ -225,8 +214,8 @@ void setup() {
   mqtt_light_pir2.current_state_cb([]() { return cb_light_pir_state(LED_SECTION_2); });
   
   led_strip.setup();
-  led_strip.add_section(LED_SECTION_1, 0, 90);
-  led_strip.add_section(LED_SECTION_2, 91, 179);
+  led_strip.add_section(LED_SECTION_1, 0, 89);
+  led_strip.add_section(LED_SECTION_2, 90, 179);
   led_strip.add_section(LED_SECTION_STATUS, 0, 0);
 
   led_strip.set_color(LED_SECTION_1, 64, 255, 128);
@@ -239,7 +228,7 @@ void setup() {
   led_strip.setBrightness(LED_SECTION_STATUS, 2);
   led_strip.on(LED_SECTION_STATUS);
 
-  led_strip.add_section(LED_SECTION_GLOBAL, 1, 179);
+  led_strip.add_section(LED_SECTION_GLOBAL, 0, 179);
   led_strip.set_color(LED_SECTION_GLOBAL, 255, 255, 255);
   led_strip.setBrightness(LED_SECTION_GLOBAL, 10);
   led_strip.off(LED_SECTION_GLOBAL);
@@ -251,8 +240,6 @@ void setup() {
   Serial.println("finished setup!");
 }
 
-void mqtt_discovery_global(void);
-
 void loop() {
   static bool mqtt_state = false;
   bool new_mqtt_state = mqtt.connected();
@@ -260,8 +247,6 @@ void loop() {
     mqtt_state = new_mqtt_state;
     if (mqtt_state){
       led_strip.off(LED_SECTION_STATUS);
-      // mqtt_discovery_all();
-      // mqtt_send_state();
     } else {
       led_strip.on(LED_SECTION_STATUS);
     }

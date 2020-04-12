@@ -18,6 +18,7 @@ public:
 
     void on(int section_num = 0);
     void off(int section_num = 0);
+    void off_soft(int section_num) { _sections[section_num].state = false; }
 
     void BlendAnimUpdate(const AnimationParam &param);
 
