@@ -241,6 +241,11 @@ void setup() {
 }
 
 void loop() {
+  timer.loop();
+
+  wifi_loop();
+  mqtt.loop();
+
   static bool mqtt_state = false;
   bool new_mqtt_state = mqtt.connected();
   if (mqtt_state != new_mqtt_state){
@@ -251,11 +256,6 @@ void loop() {
       led_strip.on(LED_SECTION_STATUS);
     }
   }
-
-  timer.loop();
-
-  wifi_loop();
-  mqtt.loop();
 
   button.loop();
   pir1.loop();

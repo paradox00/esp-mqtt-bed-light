@@ -98,8 +98,7 @@ void wifi_setup(const String& ssid, const String& pwd, const String& name)
     WiFi.hostname(name);
 
     WiFi.begin(ssid, pwd);
-    // NBNS.begin(name.c_str());
-    MDNS.begin(name.c_str());
+    NBNS.begin(name.c_str());
     MDNS.addService("http", "tcp", 80);
 
     ArduinoOTA.setHostname(name.c_str());
