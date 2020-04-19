@@ -10,8 +10,7 @@
 #include "timer.hpp"
 #include "secrets.hpp"
 
-enum
-{
+enum {
   LED_SECTION_1 = 0,
   LED_SECTION_2,
   LED_SECTION_GLOBAL,
