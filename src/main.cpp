@@ -243,10 +243,9 @@ void loop() {
   timer.loop();
 
   wifi_loop();
-  mqtt.loop();
 
   static bool mqtt_state = false;
-  bool new_mqtt_state = mqtt.connected();
+  bool new_mqtt_state = mqtt.loop();;
   if (mqtt_state != new_mqtt_state){
     mqtt_state = new_mqtt_state;
     if (mqtt_state){

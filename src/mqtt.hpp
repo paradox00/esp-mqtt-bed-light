@@ -52,7 +52,7 @@ public:
 
     boolean connected() { return _mqtt.connected();  }
 
-    void loop();
+    bool loop();
 
     PubSubClient *get_mqtt() { return &_mqtt; };
 

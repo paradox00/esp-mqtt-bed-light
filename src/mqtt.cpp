@@ -63,6 +63,10 @@ void MQTTService::master_callback(char *topic, byte *payload, unsigned int lengt
 
 boolean MQTTService::connect(){
     bool result;
+
+    _mqtt_socket = WiFiClient(); // Wifi Client reconnect issue 4497 (https://github.com/esp8266/Arduino/issues/4497)
+    _mqtt.setClient(_mqtt_socket);
+
     if (_online_topic){
         result = _mqtt.connect(WiFi.hostname().c_str(), _online_topic, 0, true, _online_payload_offline);
     } else {
@@ -74,6 +78,7 @@ boolean MQTTService::connect(){
         }
         for (int i = 0; i < _last_subscribed; i++){
             _mqtt.subscribe(_subscribes[i].topic);
+            _mqtt.loop();
         }
 
         for (int i = 0; i < _last_connect; i++) {
@@ -86,16 +91,18 @@ boolean MQTTService::connect(){
     return result;
 }
 
-void MQTTService::loop(){
-    if (WiFi.status() == WL_CONNECTED && !_mqtt.connected() && 
-    _last_retry_time + CONNECTION_INTERVAL > millis()){
-        connect();
+bool MQTTService::loop(){
+    bool connected = _mqtt.loop();
+
+    if (!connected && (WiFi.status() == WL_CONNECTED && !_mqtt.connected() && 
+        _last_retry_time + CONNECTION_INTERVAL > millis())){
+        connected = connect();
     } else {
 
     }
     _last_retry_time = millis();
 
-    _mqtt.loop();
+    return connected;
 }
 
 void MQTTService::register_connect_cb(std::function < void(void)> cb){
