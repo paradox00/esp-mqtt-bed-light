@@ -71,6 +71,12 @@ void wifi_eventGotIp(const WiFiEventStationModeGotIP & ctx)
     Serial.println(WiFi.localIP());
 
     digitalWrite(GPIO_LED_INTERNAL, 1);
+
+    bool res = MDNS.begin(WiFi.hostname());
+    Serial.printf("starting mdns res=%d\n", res);
+    MDNS.addService("http", "tcp", 80);
+    MDNS.enableArduino(8266, true);
+    Serial.printf("starting mdns service res=%d\n", res);
 }
 
 void wifi_EventDisconnect(const WiFiEventStationModeDisconnected & ctx)
@@ -89,7 +95,7 @@ void wifi_setup(const String& ssid, const String& pwd, const String& name)
     wifi_handlerGotIpEvent = WiFi.onStationModeGotIP(wifi_eventGotIp);
     wifi_handlerDisconnect = WiFi.onStationModeDisconnected(wifi_EventDisconnect);
 
-    ota_server.setup(&HTTP, "admin", "password");
+    ota_server.setup(&HTTP, "/update", "admin", "password");
     http_setup();
 
     WiFi.setAutoConnect(true);
@@ -98,8 +104,8 @@ void wifi_setup(const String& ssid, const String& pwd, const String& name)
     WiFi.hostname(name);
 
     WiFi.begin(ssid, pwd);
-    NBNS.begin(name.c_str());
-    MDNS.addService("http", "tcp", 80);
+    // NBNS.begin(name.c_str());
+    // MDNS.addService("http", "tcp", 80);
 
     ArduinoOTA.setHostname(name.c_str());
     ArduinoOTA.setPassword("password");
@@ -108,7 +114,20 @@ void wifi_setup(const String& ssid, const String& pwd, const String& name)
 
 void wifi_loop(void)
 {
-    MDNS.update();
-    HTTP.handleClient();
-    ArduinoOTA.handle();
+    static bool old_wifi_state = false;
+    bool current_wifi_state = WiFi.isConnected();
+    if (current_wifi_state){
+        if (current_wifi_state != old_wifi_state){
+            // bool res = MDNS.begin(WiFi.hostname());
+            // Serial.printf("starting mdns res=%d\n", res);
+            // MDNS.addService("http", "tcp", 80);
+            // MDNS.enableArduino(8266, true);
+            // Serial.printf("starting mdns service res=%d\n", res);
+        }
+        MDNS.update();
+        HTTP.handleClient();
+        ArduinoOTA.handle();
+    }
+
+    old_wifi_state = current_wifi_state;
 }
