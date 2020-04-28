@@ -96,6 +96,7 @@ MQTTLight mqtt_light_pir2(&mqtt, "bed_light_pir_1", mqtt_topic_hass_light_pir(1)
 enum {
   TIMER_PIR1 = 0,
   TIMER_PIR2,
+  TIMER_DEBUG,
   TIMER_LAST
 };
 Timer timer(TIMER_LAST);
@@ -235,6 +236,23 @@ void setup() {
   for (int i = 0; i < PIR_COUNT; i++){
     timer.add_timer(i, 60, pir_timer, (void *)i);
   }
+
+  timer.add_timer(
+      TIMER_DEBUG,
+      60*5,
+      [](void *ctx) {
+        String free_mem = String(ESP.getFreeHeap());
+        Serial.print("FREE MEM: ");
+        Serial.println(free_mem);
+        if (mqtt.connected())
+        {
+          mqtt.publish(MQTT_TOPIC_BASE "/free_mem",
+                       free_mem.c_str());
+        }
+        timer.enable_timer(TIMER_DEBUG);
+      },
+      nullptr);
+  timer.enable_timer(TIMER_DEBUG);
 
   Serial.println("finished setup!");
 }

@@ -96,8 +96,8 @@ void Timer::loop(){
             if (_timers[i].deadline <= _current_time_sec){
                 Serial.printf("timer: fire timer %d (current time %u) (%p)(%p)\n",
                     i, _current_time_sec, _timers[i].callback, _timers[i].ctx);
-                _timers[i].callback(_timers[i].ctx);
                 disable_timer(i);
+                _timers[i].callback(_timers[i].ctx);
             }
         }
     }
