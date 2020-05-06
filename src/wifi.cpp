@@ -98,13 +98,15 @@ void wifi_setup(const String& ssid, const String& pwd, const String& name)
     ota_server.setup(&HTTP, "/update", "admin", "password");
     http_setup();
 
+    WiFi.forceSleepWake();
+    WiFi.setSleepMode(WIFI_NONE_SLEEP);
     WiFi.setAutoConnect(true);
     WiFi.setAutoReconnect(true);
     WiFi.mode(WIFI_STA);
     WiFi.hostname(name);
 
     WiFi.begin(ssid, pwd);
-    // NBNS.begin(name.c_str());
+    NBNS.begin(name.c_str());
     // MDNS.addService("http", "tcp", 80);
 
     ArduinoOTA.setHostname(name.c_str());
