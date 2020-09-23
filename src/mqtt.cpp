@@ -114,16 +114,22 @@ void MQTTService::register_connect_cb(std::function < void(void)> cb){
 }
 
 MQTTDev::MQTTDev(MQTTService *mqtt,
-            const char *name,
-            const char *topic_discovery,
-            const char *topic_state) : 
-_mqtt(mqtt), _name(name), _topic_discovery(topic_discovery), _topic_state(topic_state)
+                 const char *name,
+                 const char *topic_discovery,
+                 const char *topic_state,
+                 const bool expose_available /*= true*/) : 
+                 _mqtt(mqtt), _name(name), _topic_discovery(topic_discovery), 
+                 _topic_state(topic_state), _not_first_time(false), 
+                 _expose_available(expose_available)
 {
     mqtt->register_connect_cb([this]() { this->on_connect(); });
 }
 
 void MQTTDev::on_connect(){
-    this->discovery_send_message();
+    if (!this->_not_first_time){
+        this->discovery_send_message();
+        this->_not_first_time = true;
+    }
     this->publish_full_state();
 }
 
@@ -142,8 +148,10 @@ void MQTTDev::discovery_send_message(){
     DynamicJsonDocument root(1024);
     root["name"] = _name;
     root["unique_id"] = _name;
-    root["availability_topic"] = _mqtt->get_online_topic();
     root["state_topic"] = _topic_state;
+    if (_expose_available) {
+        root["availability_topic"] = _mqtt->get_online_topic();
+    }
 
     JsonObject root_object = root.as<JsonObject>();
     discovery_add_dev_properties(&root_object);
@@ -182,8 +190,9 @@ MQTTLight::MQTTLight(MQTTService *mqtt,
                      const char *topic_color,
                      const char *topic_cmd,
                      const char *topic_cmd_brigtness,
-                     const char *topic_cmd_color) : 
-    MQTTDev(mqtt, name, topic_discovery, topic_state),
+                     const char *topic_cmd_color,
+                     const bool expose_availablility /*= true*/) : 
+    MQTTDev(mqtt, name, topic_discovery, topic_state, expose_availablility),
     _topic_brightness(topic_brightness),
     _topic_color(topic_color),
     _topic_cmd(topic_cmd),

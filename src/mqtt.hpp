@@ -68,7 +68,8 @@ public:
     MQTTDev(MQTTService *mqtt,
             const char *name,
             const char *topic_discovery,
-            const char *topic_state);
+            const char *topic_state,
+            const bool expose_available = true);
 
     void discovery_send_message();
 
@@ -85,6 +86,8 @@ protected:
     const char *_name;
     const char *_topic_discovery;
     const char *_topic_state;
+    bool _not_first_time;
+    bool _expose_available;
 };
 
 
@@ -119,7 +122,8 @@ public:
               const char *topic_color,
               const char *topic_cmd,
               const char *topic_cmd_brigtness,
-              const char *topic_cmd_color);
+              const char *topic_cmd_color,
+              const bool expose_availablility = true);
 
     void set_cb_state(std::function<void(bool)> cb);
     void set_cb_brigtness(std::function<void(uint8_t)> cb);

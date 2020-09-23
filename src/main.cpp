@@ -10,6 +10,8 @@
 #include "timer.hpp"
 #include "secrets.hpp"
 
+#define DEBUG_IN_MQTT 1
+
 enum {
   LED_SECTION_1 = 0,
   LED_SECTION_2,
@@ -65,7 +67,7 @@ const char *mqtt_topic_hass_pir[] = {mqtt_topic_hass_pir1, mqtt_topic_hass_pir2}
 
 const char* mqtt_server = MQTT_SERVER;
 
-int pin_button = 4; //D2(gpio4)
+int pin_button = D5; //D2(gpio4)
 
 bool G_global_on = false;
 bool G_pir_light_1 = true;
@@ -83,20 +85,22 @@ const uint16_t PixelCount = 180; // this example assumes 4 pixels, making it sma
 const uint8_t PixelPin = 2;  // make sure to set this to the correct pin, ignored for Esp8266
 LedStrip led_strip(PixelCount, PixelPin, LED_SECTION_LAST);
 
-Button button(D2);
+Button button(D5);
 Button pir1(D1); // D1
-Button pir2(D5); // D5
+Button pir2(D2); // D2 (was D5)
 
 MQTTBinarySensor mqtt_pir1(&mqtt, "bed_light_pir_0", mqtt_topic_hass_pir1, "motion", mqtt_topic_pir1);
 MQTTBinarySensor mqtt_pir2(&mqtt, "bed_light_pir_1", mqtt_topic_hass_pir2, "motion", mqtt_topic_pir2);
 MQTTLight mqtt_light_global(&mqtt, "bed_light_global", mqtt_topic_hass_global, mqtt_topic_global_state, mqtt_topic_global_brightness, mqtt_topic_global_color, mqtt_topic_global_cmd, mqtt_topic_global_brightness_cmd, mqtt_topic_global_color_cmd);
-MQTTLight mqtt_light_pir1(&mqtt, "bed_light_pir_0", mqtt_topic_hass_light_pir(0), mqtt_topic_light_pir_state(0, "state"), mqtt_topic_light_pir_state(0, "brightness"), mqtt_topic_light_pir_state(0, "color"), mqtt_topic_light_pir_cmd(0, "cmd"), mqtt_topic_light_pir_cmd(0, "brightness"), mqtt_topic_light_pir_cmd(0, "color"));
-MQTTLight mqtt_light_pir2(&mqtt, "bed_light_pir_1", mqtt_topic_hass_light_pir(1), mqtt_topic_light_pir_state(1, "state"), mqtt_topic_light_pir_state(1, "brightness"), mqtt_topic_light_pir_state(1, "color"), mqtt_topic_light_pir_cmd(1, "cmd"), mqtt_topic_light_pir_cmd(1, "brightness"), mqtt_topic_light_pir_cmd(1, "color"));
+MQTTLight mqtt_light_pir1(&mqtt, "bed_light_pir_0", mqtt_topic_hass_light_pir(0), mqtt_topic_light_pir_state(0, "state"), mqtt_topic_light_pir_state(0, "brightness"), mqtt_topic_light_pir_state(0, "color"), mqtt_topic_light_pir_cmd(0, "cmd"), mqtt_topic_light_pir_cmd(0, "brightness"), mqtt_topic_light_pir_cmd(0, "color"), false);
+MQTTLight mqtt_light_pir2(&mqtt, "bed_light_pir_1", mqtt_topic_hass_light_pir(1), mqtt_topic_light_pir_state(1, "state"), mqtt_topic_light_pir_state(1, "brightness"), mqtt_topic_light_pir_state(1, "color"), mqtt_topic_light_pir_cmd(1, "cmd"), mqtt_topic_light_pir_cmd(1, "brightness"), mqtt_topic_light_pir_cmd(1, "color"), false);
 
 enum {
   TIMER_PIR1 = 0,
   TIMER_PIR2,
+#ifdef DEBUG_IN_MQTT
   TIMER_DEBUG,
+#endif
   TIMER_LAST
 };
 Timer timer(TIMER_LAST);
@@ -106,6 +110,14 @@ void pir_set(void *ctx){
   if (!G_global_on && *G_pir_light[num]) {
     led_strip.on(num);
     timer.enable_timer(num);
+    
+#ifdef DEBUG_IN_MQTT
+    char name[24] = MQTT_TOPIC_BASE "/pir_led/";
+    size_t name_size = strlen(name);
+    name[name_size] = '0' + num;
+    name[name_size + 1] = '\0';
+    mqtt.publish(name, "on");
+#endif
   }
 
   if (num == 0){
@@ -129,6 +141,14 @@ void pir_timer(void *ctx){
   int num = (int)ctx;
   if (!G_global_on) {
     led_strip.off(num);
+
+#ifdef DEBUG_IN_MQTT
+    char name[24] = MQTT_TOPIC_BASE "/pir_led/";
+    size_t name_size = strlen(name);
+    name[name_size] = '0' + num;
+    name[name_size + 1] = '\0';
+    mqtt.publish(name, "off");
+#endif
   }
   timer.disable_timer(num);
 }
@@ -183,6 +203,11 @@ MQTTLight::State cb_light_pir_state(int section){
 }
 
 void setup() {
+  char name[25] = {0};
+
+  snprintf(name, sizeof(name), "%s-%x", DEV_NAME, ESP.getChipId());
+  name[24] = '\0';
+
   Serial.begin(74880);
 
   button.setup();
@@ -197,7 +222,7 @@ void setup() {
   pir2.set_press_cb(pir_set, (void *)LED_SECTION_2);
   pir2.set_release_cb(pir_unset, (void *)LED_SECTION_2);
 
-  wifi_setup(WIFI_SSID, WIFI_PWD, WIFI_DEV_NAME);
+  wifi_setup(WIFI_SSID, WIFI_PWD, name);
 
   mqtt_light_global.set_cb_state([](bool state) { cb_light_state(LED_SECTION_GLOBAL, state); });
   mqtt_light_global.set_cb_brigtness([](uint8_t brightness) { cb_light_brightness(LED_SECTION_GLOBAL, brightness); });
@@ -236,23 +261,33 @@ void setup() {
   for (int i = 0; i < PIR_COUNT; i++){
     timer.add_timer(i, 60, pir_timer, (void *)i);
   }
-
+#ifdef DEBUG_IN_MQTT
   timer.add_timer(
       TIMER_DEBUG,
-      60*5,
+      60*1,
       [](void *ctx) {
         String free_mem = String(ESP.getFreeHeap());
         Serial.print("FREE MEM: ");
         Serial.println(free_mem);
+
+        String rssi = String(WiFi.RSSI());
+        Serial.print("Wifi RSSI: ");
+        Serial.println(rssi);
+
+        String uptime = String(millis() / 1000);
+
         if (mqtt.connected())
         {
-          mqtt.publish(MQTT_TOPIC_BASE "/free_mem",
-                       free_mem.c_str());
+          mqtt.publish(MQTT_TOPIC_BASE "/free_mem", free_mem.c_str());
+          mqtt.publish(MQTT_TOPIC_BASE "/wifi_rssi", rssi.c_str());
+          mqtt.publish(MQTT_TOPIC_BASE "/uptime", uptime.c_str());
+          mqtt.publish(MQTT_TOPIC_BASE "/ip", WiFi.localIP().toString().c_str());
         }
         timer.enable_timer(TIMER_DEBUG);
       },
       nullptr);
   timer.enable_timer(TIMER_DEBUG);
+  #endif
 
   Serial.println("finished setup!");
 }
